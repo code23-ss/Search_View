@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
@@ -15,30 +16,76 @@ import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.RequestOptions;
-
+import androidx.appcompat.widget.SearchView;
+import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
 
     private Spinner spinner;
     private LinearLayout contentLayout;
     private ExecutorService executorService;
+    ArrayList<SearchItem> searchItemArrayList, filteredList;
+    SearchAdapter searchAdapter;
+    RecyclerView recyclerView;
+    LinearLayoutManager linearLayoutManager;
+    SearchView searchView;
+    FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        recyclerView = findViewById(R.id.recycler_view);
+        searchView = findViewById(R.id.search_view);
+
+        filteredList = new ArrayList<>();
+        searchItemArrayList = new ArrayList<>();
+
+        searchAdapter = new SearchAdapter(searchItemArrayList, this);
+        linearLayoutManager = new LinearLayoutManager(getApplicationContext());
+        recyclerView.setLayoutManager(linearLayoutManager);
+        recyclerView.setAdapter(searchAdapter);
+
+        // Firestore 인스턴스 초기화
+        db = FirebaseFirestore.getInstance();
+
+        // Firestore에서 데이터 로드
+        loadDataFromFirestore();
+
+        // SearchView에 대한 리스너 설정
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                // 사용자가 검색어를 제출했을 때 호출됨
+                searchFilter(query);
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                // 검색어가 변경될 때마다 호출됨
+                searchFilter(newText);
+                return false;
+            }
+        });
 
         // Apply window insets to adjust padding
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -169,6 +216,37 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
         // Initialize image click listeners
         initializeImageClickListeners();
+    }
+
+    private void loadDataFromFirestore() {
+        // Firestore의 "restaurants" 컬렉션에서 데이터 가져오기
+        CollectionReference restaurantRef = db.collection("restaurants");
+        restaurantRef.get().addOnCompleteListener(task -> {
+            if (task.isSuccessful()) {
+                List<SearchItem> tempList = new ArrayList<>();
+                for (QueryDocumentSnapshot document : task.getResult()) {
+                    String restaurantName = document.getString("name");
+                    if (restaurantName != null) {
+                        tempList.add(new SearchItem(restaurantName));
+                    }
+                }
+                searchItemArrayList.clear();
+                searchItemArrayList.addAll(tempList);
+                searchAdapter.notifyDataSetChanged();
+            } else {
+                Log.w("MainActivity", "Error getting documents.", task.getException());
+            }
+        });
+    }
+
+    public void searchFilter(String searchText) {
+        filteredList.clear();
+        for (SearchItem item : searchItemArrayList) {
+            if (item.getRestaurantName().toLowerCase().contains(searchText.toLowerCase())) {
+                filteredList.add(item);
+            }
+        }
+        searchAdapter.filterList(filteredList); // 필터링된 리스트를 어댑터에 전달
     }
 
     private void setupCategoryButton(int buttonId, int[] imageResIds, String[] texts, String colorHex) {
@@ -315,4 +393,5 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     public void onNothingSelected(AdapterView<?> parent) {
         // No action needed
     }
+
 }

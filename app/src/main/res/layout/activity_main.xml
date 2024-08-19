@@ -56,6 +56,11 @@
                     android:layout_marginTop="30dp"
                     app:iconifiedByDefault="false"
                     app:queryHint="search" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recycler_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="16dp"/>
             </LinearLayout>
 
             <!-- 셋째줄 -->
@@ -166,9 +171,11 @@
             </LinearLayout>
 
             <!-- 다섯째줄 (인기 레스토랑 및 바) -->
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="50dp"
@@ -672,7 +679,7 @@
                         app:cardCornerRadius="10dp"
                         android:layout_marginLeft="10dp">
                         <ImageView
-                            android:src="@drawable/gwanghuamun"
+                            android:src="@drawable/gwanghwamun"
                             android:layout_width="200dp"
                             android:layout_height="200dp" />
                     </androidx.cardview.widget.CardView>

@@ -1,24 +1,28 @@
 package com.example.mainscreen;
 
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Type;
+
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+
+import java.util.ArrayList;
 import java.util.List;
 
 public class RestaurantsActivity extends AppCompatActivity {
 
     private static final String TAG = "RestaurantsActivity";
     private RecyclerView recyclerView;
+    private RestaurantAdapter adapter;
+    private List<Restaurant> restaurantList = new ArrayList<>();
+    private List<String> documentIdList = new ArrayList<>(); // 문서 ID 리스트
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -34,50 +38,79 @@ public class RestaurantsActivity extends AppCompatActivity {
         recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        // JSON 파일에서 데이터 비동기적으로 읽기
-        new LoadRestaurantsTask().execute();
+        // Firestore에서 데이터 비동기적으로 읽기
+        loadRestaurantsFromFirestore();
+
+        // SearchView 설정
+        SearchView searchView = findViewById(R.id.search_view);
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                filterRestaurants(query);
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                filterRestaurants(newText);
+                return false;
+            }
+        });
     }
 
-    private class LoadRestaurantsTask extends AsyncTask<Void, Void, List<Restaurant>> {
+    private void loadRestaurantsFromFirestore() {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String locationPath = "categories/Location/Subcategories/Seoul";
 
-        @Override
-        protected List<Restaurant> doInBackground(Void... voids) {
-            return loadRestaurantsFromJson();
-        }
+        db.collection("restaurants")
+                .get()
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        restaurantList.clear();
+                        documentIdList.clear();
 
-        @Override
-        protected void onPostExecute(List<Restaurant> restaurantList) {
-            if (restaurantList != null) {
-                // 어댑터 설정
-                RestaurantAdapter adapter = new RestaurantAdapter(RestaurantsActivity.this, restaurantList);
-                recyclerView.setAdapter(adapter);
-            } else {
-                // 오류 메시지 표시
-                Toast.makeText(RestaurantsActivity.this, "Failed to load restaurant data from JSON.", Toast.LENGTH_LONG).show();
-                Log.e(TAG, "Failed to load restaurant data from JSON.");
+                        for (QueryDocumentSnapshot document : task.getResult()) {
+                            List<DocumentReference> categoryIds = (List<DocumentReference>) document.get("category_ids");
+                            boolean matchesLocation = false;
+
+                            for (DocumentReference ref : categoryIds) {
+                                if (ref.getPath().startsWith(locationPath)) {
+                                    matchesLocation = true;
+                                    break;
+                                }
+                            }
+
+                            if (matchesLocation) {
+                                Restaurant restaurant = document.toObject(Restaurant.class);
+                                restaurantList.add(restaurant);
+                                documentIdList.add(document.getId());
+                            }
+                        }
+
+                        adapter = new RestaurantAdapter(RestaurantsActivity.this, restaurantList, documentIdList);
+                        recyclerView.setAdapter(adapter);
+                    } else {
+                        Toast.makeText(RestaurantsActivity.this, "Failed to load restaurant data from Firestore.", Toast.LENGTH_LONG).show();
+                        Log.e(TAG, "Error getting documents: ", task.getException());
+                    }
+                });
+    }
+
+    private void filterRestaurants(String query) {
+        List<Restaurant> filteredList = new ArrayList<>();
+        List<String> filteredDocIdList = new ArrayList<>();
+
+        for (int i = 0; i < restaurantList.size(); i++) {
+            Restaurant restaurant = restaurantList.get(i);
+            if (restaurant.getName().toLowerCase().contains(query.toLowerCase())) {
+                filteredList.add(restaurant);
+                filteredDocIdList.add(documentIdList.get(i));
             }
         }
-    }
 
-    private List<Restaurant> loadRestaurantsFromJson() {
-        String json;
-        try {
-            // assets 폴더에서 JSON 파일 읽기
-            InputStream is = getAssets().open("restaurants_image.json");
-            int size = is.available();
-            byte[] buffer = new byte[size];
-            is.read(buffer);
-            is.close();
-            json = new String(buffer, "UTF-8");
-        } catch (IOException ex) {
-            ex.printStackTrace();
-            return null;
-        }
-
-        // JSON을 Restaurant 객체 리스트로 변환
-        Gson gson = new Gson();
-        Type listType = new TypeToken<List<Restaurant>>() {}.getType();
-        return gson.fromJson(json, listType);
+        // 필터된 결과로 어댑터를 업데이트
+        adapter = new RestaurantAdapter(RestaurantsActivity.this, filteredList, filteredDocIdList);
+        recyclerView.setAdapter(adapter);
     }
 }
 
